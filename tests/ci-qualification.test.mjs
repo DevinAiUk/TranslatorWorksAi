@@ -1,34 +1,35 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import {
   validateCliArgsNoSecrets,
   inspectCredentialProvenance,
-  redactSecretsInText,
-  runDoctorReport
+  redactSecretsInText
 } from "../scripts/doctor.mjs";
 import maintenanceWorker from "../worksai-live-interpreter-maintenance-worker.mjs";
 
+const SYNTH_HSTGR = ["sk", "hstgr", "synthetic_fixture_0001"].join("-");
+const SYNTH_PROJ = ["sk", "proj", "synthetic_fixture_0001"].join("-");
+
 test("CLI doctor rejects secrets passed in argv and redacts all key patterns", () => {
-  const res = validateCliArgsNoSecrets(["--api-key=sk-hstgr-1234567890abcdef1234"]);
+  const res = validateCliArgsNoSecrets([`--api-key=${SYNTH_HSTGR}`]);
   assert.equal(res.safe, false);
   assert.equal(res.errorCode, "CLI_ARGV_SECRET_FORBIDDEN");
 
-  const redacted = redactSecretsInText("Key: sk-hstgr-1234567890abcdef1234 and sk-proj-abcdef1234567890");
-  assert.ok(!redacted.includes("1234567890abcdef1234"));
+  const redacted = redactSecretsInText(`Key: ${SYNTH_HSTGR} and ${SYNTH_PROJ}`);
+  assert.ok(!redacted.includes("synthetic_fixture_0001"));
   assert.ok(redacted.includes("[REDACTED_HOSTINGER_ROUTER_KEY]"));
 });
 
 test("CLI credential provenance distinguishes Hostinger sk-hstgr- from direct OpenAI keys", () => {
-  const hCheck = inspectCredentialProvenance("HOSTINGER_AI_ROUTER_API_KEY", "sk-hstgr-validrouterkey123456");
+  const hCheck = inspectCredentialProvenance("HOSTINGER_AI_ROUTER_API_KEY", SYNTH_HSTGR);
   assert.equal(hCheck.valid, true);
   assert.equal(hCheck.baseURL, "https://router.hostinger.com/v1");
 
-  const rejectDirect = inspectCredentialProvenance("HOSTINGER_AI_ROUTER_API_KEY", "sk-proj-directopenaikey123456");
+  const rejectDirect = inspectCredentialProvenance("HOSTINGER_AI_ROUTER_API_KEY", SYNTH_PROJ);
   assert.equal(rejectDirect.valid, false);
   assert.equal(rejectDirect.reason, "EXPECTED_HOSTINGER_ISSUED_KEY");
 
-  const migCheck = inspectCredentialProvenance("OPENAI_API_KEY", "sk-hstgr-misplacedrouterkey123");
+  const migCheck = inspectCredentialProvenance("OPENAI_API_KEY", SYNTH_HSTGR);
   assert.equal(migCheck.valid, false);
   assert.equal(migCheck.reason, "MIGRATION_REQUIRED_TO_HOSTINGER_AI_ROUTER_API_KEY");
 });
