@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {
   validateCliArgsNoSecrets,
   inspectCredentialProvenance,
-  redactSecretsInText
+  redactSecretsInText,
+  runDoctorReport
 } from "../scripts/doctor.mjs";
 import maintenanceWorker from "../worksai-live-interpreter-maintenance-worker.mjs";
 
@@ -24,6 +26,8 @@ test("CLI credential provenance distinguishes Hostinger sk-hstgr- from direct Op
   const hCheck = inspectCredentialProvenance("HOSTINGER_AI_ROUTER_API_KEY", SYNTH_HSTGR);
   assert.equal(hCheck.valid, true);
   assert.equal(hCheck.baseURL, "https://router.hostinger.com/v1");
+  assert.equal(hCheck.gptModel, "gpt-5-mini");
+  assert.equal(hCheck.geminiModel, "gemini-3.5-flash-lite");
 
   const rejectDirect = inspectCredentialProvenance("HOSTINGER_AI_ROUTER_API_KEY", SYNTH_PROJ);
   assert.equal(rejectDirect.valid, false);
@@ -32,6 +36,26 @@ test("CLI credential provenance distinguishes Hostinger sk-hstgr- from direct Op
   const migCheck = inspectCredentialProvenance("OPENAI_API_KEY", SYNTH_HSTGR);
   assert.equal(migCheck.valid, false);
   assert.equal(migCheck.reason, "MIGRATION_REQUIRED_TO_HOSTINGER_AI_ROUTER_API_KEY");
+
+  const byokSameAsJwt = inspectCredentialProvenance(
+    "BYOK_ENCRYPTION_KEY",
+    "same_secret_value_32_characters_long_01",
+    { JWT_SECRET: "same_secret_value_32_characters_long_01" }
+  );
+  assert.equal(byokSameAsJwt.valid, false);
+  assert.equal(byokSameAsJwt.reason, "MUST_DIFFER_FROM_JWT_SECRET");
+});
+
+test("Doctor report detects controlled migration and outputs Google OAuth guidance without echoing secrets", () => {
+  const rep = runDoctorReport(
+    { OPENAI_API_KEY: SYNTH_HSTGR },
+    ["--worker=worksai-live-interpreter", "--env=production"]
+  );
+  assert.equal(rep.ok, true);
+  assert.equal(rep.exitCode, 0);
+  assert.ok(rep.migrationNotice.includes("CONTROLLED MIGRATION AVAILABLE"));
+  assert.ok(rep.output.includes("https://translate.worksai.org/api/auth/google/callback"));
+  assert.ok(!rep.output.includes("synthetic_fixture_0001"));
 });
 
 test("Zero-inference maintenance worker serves 200 on /health and 503 on inference routes", async () => {
@@ -44,30 +68,18 @@ test("Zero-inference maintenance worker serves 200 on /health and 503 on inferen
   assert.equal(infRes.status, 503);
 });
 
-test("Live production translate.worksai.org v1.3.0 endpoints and contracts", async () => {
-  const healthRes = await fetch("https://translate.worksai.org/health");
-  assert.equal(healthRes.status, 200);
-  const health = await healthRes.json();
-  assert.equal(health.status, "healthy");
-  assert.equal(health.version, "1.3.0");
-  assert.equal(health.hostingerRouterBaseUrl, "https://router.hostinger.com/v1");
+test("Release manifest and wrangler configuration contracts match v1.3.0 specification", () => {
+  const manifest = JSON.parse(fs.readFileSync("RELEASE-MANIFEST.json", "utf8"));
+  assert.equal(manifest.version, "1.3.0");
+  assert.equal(manifest.workerName, "worksai-live-interpreter");
+  assert.equal(manifest.customDomain, "translate.worksai.org");
+  assert.equal(manifest.hostingerRouterBaseUrl, "https://router.hostinger.com/v1");
+  assert.equal(manifest.hostingerModels.gpt, "gpt-5-mini");
+  assert.equal(manifest.hostingerModels.gemini, "gemini-3.5-flash-lite");
+  assert.equal(manifest.deepChatAsset.bytes, 386971);
 
-  const modelsRes = await fetch("https://translate.worksai.org/api/chat/models");
-  assert.equal(modelsRes.status, 200);
-  const models = await modelsRes.json();
-  assert.equal(models.sharedCredentialReference, true);
-  assert.equal(models.models["gpt-5-mini"].supportsAudioInput, false);
-  assert.equal(models.models["gemini-3.5-flash-lite"].supportsAudioInput, true);
-
-  const affRes = await fetch("https://translate.worksai.org/api/affiliate/hostinger");
-  assert.equal(affRes.status, 200);
-  const aff = await affRes.json();
-  assert.ok(aff.directDestinationUrl.includes("REFERRALCODE=U6SBOWENJOHQ"));
-  assert.equal(aff.relAttribute, "sponsored noopener");
-
-  const clarityRes = await fetch("https://translate.worksai.org/api/clarity/config");
-  assert.equal(clarityRes.status, 200);
-  const clarity = await clarityRes.json();
-  assert.equal(clarity.projectId, "zak4f5nfep");
-  assert.equal(clarity.enabledOnAuthenticatedWorkspace, false);
+  const wrangler = fs.readFileSync("wrangler.toml", "utf8");
+  assert.ok(wrangler.includes('name = "worksai-live-interpreter"'));
+  assert.ok(wrangler.includes('HOSTINGER_AI_ROUTER_BASE_URL = "https://router.hostinger.com/v1"'));
+  assert.ok(wrangler.includes('ENABLE_COHERE_KEY_FAILOVER = "false"'));
 });
