@@ -1,0 +1,43 @@
+{
+  "product": "WorksAI Live Interpreter",
+  "version": "1.3.0",
+  "workerName": "worksai-live-interpreter",
+  "customDomain": "translate.worksai.org",
+  "cloudflareAccountId": "dc1b1fad6c4ef1c4a6a4cff0c6a19f43",
+  "cloudflareZoneId": "ce9b21157b7b1c0d83eacd3180884f13",
+  "r2Bucket": "worksai-datalake",
+  "hostingerRouterBaseUrl": "https://router.hostinger.com/v1",
+  "hostingerModels": {
+    "gpt": "gpt-5-mini",
+    "gemini": "gemini-3.5-flash-lite",
+    "geminiRegionalAliases": [
+      "gemini-3.5-flash-lite-us",
+      "gemini-3.5-flash-lite-eu"
+    ]
+  },
+  "deepChatAsset": {
+    "r2Key": "static_assets/deepChat.bundle.v2.5.1.js",
+    "bytes": 386971,
+    "sha256": "6844eaf354e19d50dcdd8ee78968d6ae32ccd4b9f15a883902d60e93d69caf84"
+  },
+  "files": {
+    "worksai-live-interpreter-worker.mjs": {
+      "bytes": 221861,
+      "sha256": "7c35ffcb130dc9d82cb759069b64ea616e13942730cb530f3a025ae61e27f520"
+    }
+  },
+  "deployment": {
+    "deploymentId": "b0acebd8-c942-4fde-ae36-1639c9168f35",
+    "versionId": "5b905a2d-ed1c-44f3-95fc-8e244f57292a",
+    "deployedAt": "2026-11-08T20:22:13.222264Z",
+    "workerScriptBytes": 221861,
+    "workerScriptSha256": "7c35ffcb130dc9d82cb759069b64ea616e13942730cb530f3a025ae61e27f520",
+    "baselineReplaced": {
+      "version": "1.2.1",
+      "deploymentId": "26d74072-d1d6-4c63-b42d-2727d413e071",
+      "versionId": "7af5ed39-9bd4-4acf-879e-37ae00b409d0",
+      "workerScriptBytes": 137370,
+      "workerScriptSha256": "b325d4a10e1e34782db16ca077598c044d5ec8029281eec98831e76ba4cda662"
+    }
+  }
+}

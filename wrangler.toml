@@ -1,0 +1,43 @@
+name = "worksai-live-interpreter"
+main = "worksai-live-interpreter-worker.mjs"
+compatibility_date = "2026-03-01"
+account_id = "dc1b1fad6c4ef1c4a6a4cff0c6a19f43"
+
+routes = [
+  { pattern = "translate.worksai.org", custom_domain = true }
+]
+
+[[r2_buckets]]
+binding = "WORKSAI_DATA_LAKE"
+bucket_name = "worksai-datalake"
+
+[ai]
+binding = "AI"
+
+[vars]
+WORKSAI_ENV = "production"
+HOSTINGER_AI_ROUTER_BASE_URL = "https://router.hostinger.com/v1"
+HOSTINGER_GPT_MODEL = "gpt-5-mini"
+HOSTINGER_GEMINI_MODEL = "gemini-3.5-flash-lite"
+ENABLE_COHERE_KEY_FAILOVER = "false"
+COHERE_USER_MAX_ACTIVE = "1"
+COHERE_USER_TEXT_PER_MIN = "2"
+COHERE_USER_TEXT_PER_DAY = "10"
+COHERE_USER_TRANSCRIBE_PER_5MIN = "1"
+COHERE_USER_TRANSCRIBE_PER_DAY = "3"
+COHERE_MAX_AUDIO_SECONDS = "60"
+COHERE_MAX_AUDIO_BYTES = "5242880"
+COHERE_MAX_TEXT_BYTES = "8192"
+COHERE_MAX_OUTPUT_TOKENS = "400"
+COHERE_TENANT_MAX_ACTIVE = "2"
+COHERE_TENANT_TEXT_PER_MIN = "4"
+COHERE_TENANT_TEXT_PER_DAY = "20"
+COHERE_TENANT_TRANSCRIBE_PER_MIN = "1"
+COHERE_TENANT_TRANSCRIBE_PER_DAY = "5"
+COHERE_ACCOUNT_TEXT_PER_MIN = "8"
+COHERE_ACCOUNT_TRANSCRIBE_PER_MIN = "2"
+COHERE_ACCOUNT_MAX_PER_DAY = "20"
+COHERE_ACCOUNT_MAX_PER_MONTH = "800"
+COHERE_LEASE_TTL_MS = "45000"
+COHERE_TIMEOUT_MS = "15000"
+COHERE_UNCERTAIN_HOLD_MS = "15000"

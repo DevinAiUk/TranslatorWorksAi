@@ -1,50 +1,16 @@
 {
-  "name": "gpt-realtime-translate-live-event-interpreter",
+  "name": "worksai-live-interpreter",
+  "version": "1.3.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "doctor": "node scripts/doctor.mjs",
-    "predev": "node scripts/doctor.mjs",
-    "dev": "sh scripts/dev.sh",
-    "dev:web": "pnpm --filter @gpt-realtime-translate-live-event-interpreter/web dev",
-    "dev:api": "cd services/api && .venv/bin/uvicorn main:app --reload --port ${API_PORT:-8000}",
-    "build": "pnpm --filter @gpt-realtime-translate-live-event-interpreter/web build",
-    "typecheck": "pnpm --filter @gpt-realtime-translate-live-event-interpreter/web typecheck",
-    "lint": "pnpm --filter @gpt-realtime-translate-live-event-interpreter/web lint",
-    "lint:api": "cd services/api && .venv/bin/ruff check .",
-    "test:api": "cd services/api && .venv/bin/python -m pytest",
-    "check:structure": "cd services/api && .venv/bin/python -m pytest tests/test_structure.py -v",
-    "test:e2e": "pnpm --filter @gpt-realtime-translate-live-event-interpreter/web exec playwright test"
-  },
-  "devDependencies": {
-    "concurrently": "^9.2.1"
-  },
-  "pnpm": {
-    "overrides": {
-      "@babel/core": "7.29.7",
-      "@hono/node-server": "1.19.15",
-      "@modelcontextprotocol/sdk": "1.30.0",
-      "@modelcontextprotocol/sdk>ajv": "8.20.0",
-      "body-parser": "2.3.0",
-      "express-rate-limit": "8.2.2",
-      "fast-uri": "3.1.5",
-      "flatted": "3.4.2",
-      "fdir>picomatch": "4.0.5",
-      "hono": "4.12.34",
-      "ip-address": "10.3.1",
-      "js-yaml": "4.3.1",
-      "lodash": "4.18.1",
-      "minimatch": "10.2.5",
-      "micromatch>picomatch": "2.3.2",
-      "path-to-regexp": "8.4.2",
-      "picomatch": "4.0.5",
-      "postcss-selector-parser": "7.1.3",
-      "postcss": "8.5.23",
-      "qs": "6.15.2",
-      "shell-quote": "1.9.0"
-    }
+    "setup:keys": "node scripts/doctor.mjs",
+    "lint": "node --check scripts/doctor.mjs && node --check worksai-live-interpreter-maintenance-worker.mjs && node --check tests/ci-qualification.test.mjs",
+    "secret-scan": "node -e \"import('node:fs').then(fs=>{for(const f of ['.env.example','wrangler.toml','scripts/doctor.mjs','worksai-live-interpreter-maintenance-worker.mjs','tests/ci-qualification.test.mjs']){if(!fs.existsSync(f))continue;const c=fs.readFileSync(f,'utf8');if(/sk-hstgr-[A-Za-z0-9]{16,}|sk-proj-[A-Za-z0-9]{16,}|AIza[0-9A-Za-z_-]{25,}/.test(c)){console.error('Secret leak in '+f);process.exit(1);}}console.log('✓ Secret scan passed (0 leaks).');})\"",
+    "test": "node --test tests/ci-qualification.test.mjs"
   },
   "engines": {
-    "node": ">=20.18.1",
-    "pnpm": ">=9"
+    "node": ">=20.18.1"
   }
 }

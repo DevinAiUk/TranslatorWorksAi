@@ -1,0 +1,2 @@
+7c35ffcb130dc9d82cb759069b64ea616e13942730cb530f3a025ae61e27f520  worksai-live-interpreter-worker.mjs
+6844eaf354e19d50dcdd8ee78968d6ae32ccd4b9f15a883902d60e93d69caf84  assets/deep-chat.js
