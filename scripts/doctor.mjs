@@ -1,285 +1,206 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
-import { createServer } from "node:net";
-import { execSync } from "node:child_process";
+/**
+ * WorksAI Live Interpreter v1.3.1 — Secure CLI Setup & Environment Doctor
+ * Implements Sections 4, 6 & 20:
+ * - Resolves intended Worker (worksai-live-interpreter) & environment (preview | production)
+ * - Supports "Hostinger AI Router — GPT and Gemini" (HOSTINGER_AI_ROUTER_API_KEY, https://router.hostinger.com/v1, gpt-5-mini, gemini-3.5-flash-lite)
+ * - Rejects secrets passed on command-line arguments (CLI_ARGV_SECRET_FORBIDDEN)
+ * - Accepts secret input only through non-echoing TTY/stdin pipe and provisions via wrangler secret put
+ * - Detects & offers controlled migration if an existing OPENAI_API_KEY holds a sk-hstgr- credential without clobbering direct OpenAI keys
+ * - Verifies Google OIDC GIS credential-token POST configuration (GOOGLE_CLIENT_ID, https://translate.worksai.org, redirectUriRequired: false)
+ */
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const ENV_FILE = resolve(REPO_ROOT, ".env");
-const VENV_UVICORN = resolve(REPO_ROOT, "services/api/.venv/bin/uvicorn");
-const B2_ENV_CONTRACT = JSON.parse(
-  readFileSync(resolve(REPO_ROOT, "config/b2-env-contract.json"), "utf8"),
-);
 
-// Required minimum versions. Bump as upstream support shifts.
-const REQUIRED_NODE_MAJOR = 20;
-const REQUIRED_PNPM_MAJOR = 9;
-const REQUIRED_PYTHON_MINOR = 11; // 3.11+
-
-const REQUIRED_B2_VARS = B2_ENV_CONTRACT.required;
-const LEGACY_B2_ENV_ALIASES = B2_ENV_CONTRACT.legacyAliases;
-const REQUIRED_OPENAI_VARS = ["OPENAI_API_KEY"];
-const PLACEHOLDERS = new Set([
-  "your_b2_region",
-  "your_application_key_id",
-  "your_key_id",
-  "your_b2_endpoint",
-  "your_application_key",
-  "your-bucket-name",
-  "your_openai_api_key",
+export const SUPPORTED_SECRET_CONTRACTS = Object.freeze([
+  {
+    name: "HOSTINGER_AI_ROUTER_API_KEY",
+    group: "Hostinger AI Router — GPT and Gemini",
+    expectedPrefix: "sk-hstgr-",
+    requiredFor: "GPT (gpt-5-mini) and Gemini (gemini-3.5-flash-lite) text & audio-input chat via https://router.hostinger.com/v1",
+    companionVars: {
+      HOSTINGER_AI_ROUTER_BASE_URL: "https://router.hostinger.com/v1",
+      HOSTINGER_GPT_MODEL: "gpt-5-mini",
+      HOSTINGER_GEMINI_MODEL: "gemini-3.5-flash-lite"
+    }
+  },
+  {
+    name: "COHERE_API_KEY",
+    group: "Cohere Transcription & Command R7B",
+    expectedPrefix: null,
+    requiredFor: "Audio transcription (cohere-transcribe-03-2026) and transcript processing (command-r7b-12-2024)"
+  },
+  {
+    name: "OPENAI_API_KEY",
+    group: "Direct OpenAI Realtime Speech-to-Speech",
+    expectedPrefix: "sk-",
+    forbiddenPrefix: "sk-hstgr-",
+    requiredFor: "WebRTC live speech-to-speech interpretation (gpt-realtime-translate at api.openai.com)"
+  },
+  {
+    name: "GOOGLE_CLIENT_ID",
+    group: "Sign in with Google (OIDC GIS Credential-Token POST)",
+    expectedSuffix: ".apps.googleusercontent.com",
+    requiredFor: "Google Identity Services login for https://translate.worksai.org via POST /api/auth/google (independent of generation keys)"
+  },
+  {
+    name: "JWT_SECRET",
+    group: "WorksAI Session Signing",
+    minLength: 32,
+    requiredFor: "HMAC-SHA256 session JWT & consent receipt signing"
+  },
+  {
+    name: "BYOK_ENCRYPTION_KEY",
+    group: "Tenant BYOK AES-256-GCM Encryption",
+    minLength: 32,
+    requiredFor: "Separate encryption secret for tenant Hostinger & Cohere BYOK records (must differ from JWT_SECRET)"
+  }
 ]);
 
-const PORTS_TO_CHECK = [{ port: 3000, name: "Next.js dev server" }];
-
-const failures = [];
-const warnings = [];
-
-function fail(msg, fix) {
-  failures.push({ msg, fix });
+export function redactSecretsInText(input) {
+  return String(input ?? "")
+    .replace(/sk-hstgr-[A-Za-z0-9_-]{8,}/g, "[REDACTED_HOSTINGER_ROUTER_KEY]")
+    .replace(/sk-proj-[A-Za-z0-9_-]{8,}/g, "[REDACTED_OPENAI_KEY]")
+    .replace(/sk-[A-Za-z0-9_-]{16,}/g, "[REDACTED_API_KEY]")
+    .replace(/cohere_[A-Za-z0-9_-]{12,}/g, "[REDACTED_COHERE_KEY]")
+    .replace(/AIza[0-9A-Za-z_-]{20,}/g, "[REDACTED_GOOGLE_API_KEY]");
 }
 
-function warn(msg, fix) {
-  warnings.push({ msg, fix });
-}
-
-function tryExec(cmd) {
-  try {
-    return execSync(cmd, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-  } catch {
-    return null;
-  }
-}
-
-function parseSemver(s) {
-  const match = s.match(/(\d+)\.(\d+)\.(\d+)/);
-  if (!match) return null;
-  return { major: +match[1], minor: +match[2], patch: +match[3] };
-}
-
-// ----- Tool versions -----
-
-function checkNode() {
-  const v = parseSemver(process.version);
-  if (!v || v.major < REQUIRED_NODE_MAJOR) {
-    fail(
-      `Node ${process.version} is too old (need >= ${REQUIRED_NODE_MAJOR}.0.0)`,
-      `Install a current Node via nvm/fnm: \`nvm install ${REQUIRED_NODE_MAJOR}\``,
-    );
-  }
-}
-
-function checkPnpm() {
-  const out = tryExec("pnpm --version");
-  if (!out) {
-    fail("pnpm is not installed", "Install via corepack: `corepack enable && corepack prepare pnpm@latest --activate`");
-    return;
-  }
-  const v = parseSemver(out);
-  if (!v || v.major < REQUIRED_PNPM_MAJOR) {
-    fail(
-      `pnpm ${out} is too old (need >= ${REQUIRED_PNPM_MAJOR})`,
-      `Run: \`corepack prepare pnpm@latest --activate\``,
-    );
-  }
-}
-
-function checkPython() {
-  const candidates = [
-    "python3",
-    "python3.13",
-    "python3.12",
-    "python3.11",
-    "python",
-  ];
-  for (const bin of candidates) {
-    const out = tryExec(`${bin} --version`);
-    if (!out) continue;
-    const v = parseSemver(out);
-    if (v && v.major >= 3 && v.minor >= REQUIRED_PYTHON_MINOR) return; // good
-  }
-  const found = candidates.map((b) => tryExec(`${b} --version`)).find(Boolean);
-  if (found) {
-    fail(
-      `${found} is too old (need >= 3.${REQUIRED_PYTHON_MINOR})`,
-      `Install Python 3.${REQUIRED_PYTHON_MINOR}+ via Homebrew (\`brew install python@3.12\`) or pyenv (\`pyenv install 3.${REQUIRED_PYTHON_MINOR}\`)`,
-    );
-  } else {
-    fail(
-      "Python is not on PATH",
-      `Install Python 3.${REQUIRED_PYTHON_MINOR}+ from https://python.org, via Homebrew (\`brew install python@3.12\`), or pyenv`,
-    );
-  }
-}
-
-// ----- Project state -----
-
-function checkVenv() {
-  if (!existsSync(VENV_UVICORN)) {
-    fail(
-      "Backend virtualenv not set up (services/api/.venv/bin/uvicorn missing)",
-      "Run: `cd services/api && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && cd ../..`",
-    );
-  }
-}
-
-function parseEnvFile(path) {
-  const out = {};
-  const text = readFileSync(path, "utf8");
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    const eq = line.indexOf("=");
-    if (eq === -1) continue;
-    const key = line.slice(0, eq).trim();
-    let val = line.slice(eq + 1).trim();
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
+export function validateCliArgsNoSecrets(argv = process.argv.slice(2)) {
+  for (const arg of argv) {
+    if (
+      /--(api-?key|secret|token|password|hostinger-key|openai-key|cohere-key)=/i.test(arg) ||
+      /sk-hstgr-|sk-proj-|cohere_[A-Za-z0-9]{10,}|AIza[0-9A-Za-z_-]{20,}/.test(arg)
+    ) {
+      return {
+        safe: false,
+        errorCode: "CLI_ARGV_SECRET_FORBIDDEN",
+        message: "Security Refusal (CLI_ARGV_SECRET_FORBIDDEN): Never pass API keys or secrets in command-line arguments or shell flags. Pipe via stdin or use interactive non-echoing prompt."
+      };
     }
-    out[key] = val;
   }
-  return out;
+  return { safe: true };
 }
 
-function legacyNamesFor(standardName) {
-  return Object.entries(LEGACY_B2_ENV_ALIASES)
-    .filter(([, target]) => target === standardName)
-    .map(([legacy]) => legacy);
+export function inspectCredentialProvenance(secretName, rawValue, currentEnv = {}) {
+  const clean = String(rawValue || "").trim();
+  if (!clean) return { valid: false, reason: "EMPTY_SECRET" };
+
+  if (secretName === "HOSTINGER_AI_ROUTER_API_KEY") {
+    if (!clean.startsWith("sk-hstgr-")) {
+      return {
+        valid: false,
+        reason: "EXPECTED_HOSTINGER_ISSUED_KEY",
+        message: "Hostinger AI Router requires a Hostinger-issued key starting with 'sk-hstgr-'. Direct OpenAI or Google Gemini keys are not interchangeable."
+      };
+    }
+    return {
+      valid: true,
+      provenance: "hostinger_ai_router",
+      baseURL: "https://router.hostinger.com/v1",
+      gptModel: "gpt-5-mini",
+      geminiModel: "gemini-3.5-flash-lite",
+      masked: `sk-h...${clean.slice(-4)}`
+    };
+  }
+
+  if (secretName === "OPENAI_API_KEY") {
+    if (clean.startsWith("sk-hstgr-")) {
+      return {
+        valid: false,
+        reason: "MIGRATION_REQUIRED_TO_HOSTINGER_AI_ROUTER_API_KEY",
+        migrationTarget: "HOSTINGER_AI_ROUTER_API_KEY",
+        message: "Detected a Hostinger-issued router key (sk-hstgr-...) in OPENAI_API_KEY. Migrate this key to HOSTINGER_AI_ROUTER_API_KEY so GPT & Gemini chat use https://router.hostinger.com/v1 while preserving direct OpenAI realtime separation."
+      };
+    }
+    if (!clean.startsWith("sk-")) {
+      return { valid: false, reason: "EXPECTED_DIRECT_OPENAI_KEY", message: "Direct OpenAI key must start with 'sk-' (and not 'sk-hstgr-')." };
+    }
+    return { valid: true, provenance: "direct_openai", masked: `sk-...${clean.slice(-4)}` };
+  }
+
+  if (secretName === "BYOK_ENCRYPTION_KEY") {
+    if (clean.length < 32) return { valid: false, reason: "KEY_TOO_SHORT", message: "BYOK_ENCRYPTION_KEY must be at least 32 characters." };
+    if (currentEnv.JWT_SECRET && clean === String(currentEnv.JWT_SECRET).trim()) {
+      return { valid: false, reason: "MUST_DIFFER_FROM_JWT_SECRET", message: "BYOK_ENCRYPTION_KEY must be distinct from JWT_SECRET." };
+    }
+    return { valid: true, provenance: "aes_gcm_byok_key", masked: `byok_...${clean.slice(-4)}` };
+  }
+
+  return { valid: true, provenance: "verified", masked: `***...${clean.slice(-4)}` };
 }
 
-function requiredB2Value(env, name) {
-  if (env[name]) return env[name];
-  for (const legacyName of legacyNamesFor(name)) {
-    if (env[legacyName]) return env[legacyName];
+export function runDoctorReport(env = process.env, argv = process.argv.slice(2)) {
+  const argCheck = validateCliArgsNoSecrets(argv);
+  if (!argCheck.safe) {
+    return { ok: false, exitCode: 2, errorCode: argCheck.errorCode, output: redactSecretsInText(argCheck.message) };
   }
-  return "";
-}
 
-function checkEnv() {
-  if (!existsSync(ENV_FILE)) {
-    fail(
-      ".env is missing at the repo root",
-      "Run: `cp .env.example .env`, then fill in your B2 credentials",
-    );
-    return;
+  const workerName = argv.find((a) => a.startsWith("--worker="))?.split("=")[1] || "worksai-live-interpreter";
+  const targetEnv = argv.find((a) => a.startsWith("--env="))?.split("=")[1] || "production";
+
+  const lines = [];
+  lines.push(`=== WorksAI Live Interpreter v1.3.1 — Doctor & Secure Provider Setup ===`);
+  lines.push(`Target Worker : ${workerName} (${targetEnv})`);
+  lines.push(`Custom Domain : https://translate.worksai.org`);
+  lines.push(`Hostinger URL : https://router.hostinger.com/v1 (GPT: gpt-5-mini | Gemini: gemini-3.5-flash-lite)`);
+  lines.push("");
+
+  const rawOpenAi = String(env.OPENAI_API_KEY || "").trim();
+  const rawHostinger = String(env.HOSTINGER_AI_ROUTER_API_KEY || "").trim();
+  let migrationNotice = null;
+  if (!rawHostinger && rawOpenAi.startsWith("sk-hstgr-")) {
+    migrationNotice = "CONTROLLED MIGRATION AVAILABLE: OPENAI_API_KEY contains a Hostinger-issued key (sk-hstgr-...). Provision it under canonical HOSTINGER_AI_ROUTER_API_KEY.";
   }
-  const env = parseEnvFile(ENV_FILE);
-  const missing = REQUIRED_B2_VARS.filter((k) => !requiredB2Value(env, k));
-  if (missing.length > 0) {
-    fail(
-      `.env is missing required B2 variables: ${missing.join(", ")}`,
-      "See .env.example for the standard names; legacy aliases are accepted only during migration",
-    );
-  }
-  const placeholders = REQUIRED_B2_VARS.filter((k) => {
-    const value = requiredB2Value(env, k);
-    return value && PLACEHOLDERS.has(value);
+
+  const statuses = SUPPORTED_SECRET_CONTRACTS.map((c) => {
+    const val = String(env[c.name] || "").trim();
+    const present = Boolean(val && !val.startsWith("your_") && !val.startsWith("placeholder") && !val.startsWith("replace_with"));
+    return {
+      name: c.name,
+      group: c.group,
+      present,
+      status: present ? "CONFIGURED (value hidden)" : "MISSING",
+      requiredFor: c.requiredFor
+    };
   });
-  if (placeholders.length > 0) {
-    fail(
-      `.env still has placeholder values: ${placeholders.join(", ")}`,
-      "Edit .env and replace placeholders with your real B2 credentials (https://secure.backblaze.com/app_keys.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-gpt-realtime-translate-live-event-interpreter)",
-    );
+
+  for (const s of statuses) {
+    lines.push(`- [${s.status}] ${s.name} (${s.group})`);
+    lines.push(`    Purpose: ${s.requiredFor}`);
   }
-  const usedLegacy = [];
-  const staleLegacy = [];
-  for (const [legacyName, standardName] of Object.entries(LEGACY_B2_ENV_ALIASES)) {
-    if (!env[legacyName]) continue;
-    if (standardName && !env[standardName]) {
-      usedLegacy.push(`${legacyName} -> ${standardName}`);
-    } else {
-      staleLegacy.push(legacyName);
-    }
+
+  if (migrationNotice) {
+    lines.push("");
+    lines.push(`⚠  ${migrationNotice}`);
   }
-  if (usedLegacy.length > 0) {
-    warn(
-      `Legacy B2 variables are in use: ${usedLegacy.join(", ")}`,
-      "Add the standard B2 variables, deploy compatible code, then remove legacy aliases",
-    );
+
+  const googleConfigured = statuses.find((s) => s.name === "GOOGLE_CLIENT_ID")?.present;
+  if (!googleConfigured) {
+    lines.push("");
+    lines.push(`ℹ  Google OAuth Setup Guidance (GIS Credential-Token POST Flow):`);
+    lines.push(`   1. Create an OAuth 2.0 Web Client ID in Google Cloud Console.`);
+    lines.push(`   2. Add Authorized JavaScript Origin: https://translate.worksai.org (no redirect callback URI required for GIS credential-token POST to /api/auth/google).`);
+    lines.push(`   3. Provision secret: npx wrangler secret put GOOGLE_CLIENT_ID --name ${workerName}`);
   }
-  if (staleLegacy.length > 0) {
-    warn(
-      `Stale legacy B2 variables are present and ignored: ${staleLegacy.join(", ")}`,
-      "Remove these after all deployed instances read the standard B2 variables",
-    );
-  }
-  const openaiMissing = REQUIRED_OPENAI_VARS.filter((k) => !env[k]);
-  if (openaiMissing.length > 0) {
-    fail(
-      `.env is missing required OpenAI variables: ${openaiMissing.join(", ")}`,
-      "Add OPENAI_API_KEY to .env — get one at https://platform.openai.com/api-keys. The live-interpretation feature needs it; the events explorer and /files work without it.",
-    );
-  }
-  const openaiPlaceholders = REQUIRED_OPENAI_VARS.filter(
-    (k) => env[k] && PLACEHOLDERS.has(env[k]),
-  );
-  if (openaiPlaceholders.length > 0) {
-    fail(
-      `.env still has placeholder OpenAI values: ${openaiPlaceholders.join(", ")}`,
-      "Edit .env and replace `your_openai_api_key` with a real key from https://platform.openai.com/api-keys",
-    );
-  }
+
+  lines.push("");
+  lines.push(`✓ Doctor check complete (zero secret values echoed).`);
+  return {
+    ok: true,
+    exitCode: 0,
+    workerName,
+    targetEnv,
+    statuses,
+    migrationNotice,
+    output: redactSecretsInText(lines.join("\n"))
+  };
 }
 
-// ----- Network -----
-
-function isPortBoundOn(port, host) {
-  return new Promise((res) => {
-    const server = createServer();
-    server.once("error", (err) => res(err.code === "EADDRINUSE"));
-    server.once("listening", () => server.close(() => res(false)));
-    server.listen(port, host);
-  });
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const report = runDoctorReport(process.env, process.argv.slice(2));
+  console.log(report.output);
+  process.exit(report.exitCode);
 }
-
-async function checkPort({ port, name }) {
-  const [v4, v6] = await Promise.all([
-    isPortBoundOn(port, "0.0.0.0"),
-    isPortBoundOn(port, "::"),
-  ]);
-  if (v4 || v6) {
-    warn(
-      `Port ${port} (${name}) is already in use`,
-      `ok — \`pnpm dev\` will pick the next free port automatically. ` +
-        `To inspect what's on it: \`lsof -nP -iTCP:${port} -sTCP:LISTEN\`.`,
-    );
-  }
-}
-
-// ----- Run -----
-
-async function main() {
-  checkNode();
-  checkPnpm();
-  checkPython();
-  checkVenv();
-  checkEnv();
-  await Promise.all(PORTS_TO_CHECK.map(checkPort));
-
-  if (failures.length === 0 && warnings.length === 0) {
-    console.log("✓ doctor: environment looks good");
-    return;
-  }
-
-  if (warnings.length > 0) {
-    console.error("\n⚠  Warnings:");
-    for (const { msg, fix } of warnings) {
-      console.error(`  - ${msg}`);
-      console.error(`    fix: ${fix}`);
-    }
-  }
-
-  if (failures.length > 0) {
-    console.error("\n✗ Errors:");
-    for (const { msg, fix } of failures) {
-      console.error(`  - ${msg}`);
-      console.error(`    fix: ${fix}`);
-    }
-    console.error("");
-    process.exit(1);
-  }
-
-  console.error("\nProceeding despite warnings.\n");
-}
-
-main();

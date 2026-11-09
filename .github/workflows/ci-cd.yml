@@ -1,0 +1,126 @@
+name: WorksAI Live Interpreter CI/CD (translate.worksai.org)
+
+on:
+  push:
+    branches: [main, "release/**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: worksai-live-interpreter-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  verify-and-test:
+    name: Syntax, Clean-Checkout Build Gate, Wrangler Dry-Run, Secret Hygiene & Qualification Suites
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Clean-Checkout Dependency Installation from Lockfile
+        run: npm ci
+
+      - name: Verify Zero Untracked or Missing Runtime Module Dependencies
+        run: |
+          git status --porcelain
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Clean checkout contains untracked or modified files before build."
+            exit 1
+          fi
+          for f in worksai-live-interpreter-worker.mjs src/interpreter-worker.mjs src/interpreter-cohere-and-hostinger.mjs src/interpreter-ui-and-contracts.mjs; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing committed runtime module or asset: $f"
+              exit 1
+            fi
+          done
+
+      - name: Run Syntax & Module Verification
+        run: npm run lint
+
+      - name: Run Clean-Checkout Build & Deep Chat Asset Integrity Gate
+        run: npm run build
+
+      - name: Run Wrangler Dry-Run Bundle Inspection (No Production Mutation)
+        run: |
+          npx --yes wrangler@3.114.0 deploy --dry-run --outdir /tmp/wrangler-dry-run
+          ls -la /tmp/wrangler-dry-run
+          sha256sum /tmp/wrangler-dry-run/worksai-live-interpreter-worker.js
+
+      - name: Run Secret & Credential Hygiene Scan
+        run: npm run secret-scan
+
+      - name: Run CLI Doctor & Provenance Self-Check
+        run: npm run doctor
+
+      - name: Run v1.1.0, v1.2.1, v1.3.0 & CI Qualification Test Suites
+        run: npm test
+
+      - name: Verify RELEASE-MANIFEST.json Integrity
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import crypto from "node:crypto";
+            const m = JSON.parse(fs.readFileSync("RELEASE-MANIFEST.json", "utf8"));
+            for (const [file, meta] of Object.entries(m.files)) {
+              const data = fs.readFileSync(file);
+              const sha = crypto.createHash("sha256").update(data).digest("hex");
+              if (sha !== meta.sha256) {
+                console.error(`Checksum mismatch for ${file}: expected ${meta.sha256}, got ${sha}`);
+                process.exit(1);
+              }
+            }
+            console.log("✓ All RELEASE-MANIFEST.json SHA-256 checksums verified.");
+          '
+
+      - name: Upload Verified Release Manifest & Generated Bundle Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: worksai-live-interpreter-v1.3.1-manifest-and-bundle
+          path: |
+            RELEASE-MANIFEST.json
+            SHA256SUMS.txt
+            dist/worksai-live-interpreter-worker.bundle.mjs
+            /tmp/wrangler-dry-run/worksai-live-interpreter-worker.js
+
+  deploy-production:
+    name: Deploy to Cloudflare Workers (translate.worksai.org)
+    needs: verify-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && github.repository == 'DevinAiUk/gpt-realtime-translate-live-event-interpreter'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: worksai-live-interpreter-production-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify Required Cloudflare Deployment Secrets
+        env:
+          CF_TOKEN_PRESENT: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          CF_ACC_PRESENT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        run: |
+          if [ "$CF_TOKEN_PRESENT" != "true" ] || [ "$CF_ACC_PRESENT" != "true" ]; then
+            echo "::error::Configuration blocker: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets are required for automated Wrangler deployment."
+            exit 1
+          fi
+
+      - name: Deploy Worker via Wrangler
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Post-Deploy Live Smoke Check (translate.worksai.org)
+        run: |
+          curl --fail --silent --show-error https://translate.worksai.org/health | grep '"status": "healthy"'
+          curl --fail --silent --show-error https://translate.worksai.org/api/mcp/manifest | grep '"worksai-live-interpreter-mcp"'

@@ -50,3 +50,13 @@ test-results/
 # Local runtime data (download counter, etc.)
 services/api/data/
 tmp/
+
+# WorksAI Live Interpreter generated bundles & dry-run outputs
+dist/
+.wrangler/
+worksai-live-interpreter-worker.bundle.mjs
+*.min.mjs
+*.min2.mjs
+qualification_v1_1_results.json
+assets/deepChat.bundle.js
+cohere_v1_2_1_qualification_results.json
