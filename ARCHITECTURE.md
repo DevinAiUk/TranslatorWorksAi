@@ -1,3 +1,36 @@
+<!-- last_verified: 2026-11-08 -->
+# WorksAI Live Interpreter (`translate.worksai.org`) — Cloudflare Workers Module Map (v1.3.1)
+
+## Edge Worker Module Map
+
+```text
+wrangler.toml (main = "worksai-live-interpreter-worker.mjs", compatibility_date = "2026-03-01")
+  |
+  +-- worksai-live-interpreter-worker.mjs (canonical alias: src/interpreter-worker.mjs)
+        |-- Request router (handleInterpreterFetch) & security/CSP headers
+        |-- Session JWTs (HS256), CSRF protection, R2 token revocation, bootstrap lock
+        |-- Google OIDC GIS credential-token POST (/api/auth/google, /api/auth/google/nonce)
+        |     with RS256 JWKS verification, one-time server challenge nonce, and invite gate
+        |-- Live interpretation session lifecycle & signed consent receipts (wai_consent_v1)
+        |-- MCP JSON-RPC 2.0 server (/api/mcp, /api/mcp/manifest, 8 tools)
+        |
+        +-- imports ./src/interpreter-cohere-and-hostinger.mjs
+        |     |-- Hostinger AI Router adapter (https://router.hostinger.com/v1, GPT & Gemini)
+        |     |-- Cohere Transcribe (cohere-transcribe-03-2026) & Command R7B (command-r7b-12-2024)
+        |     |-- AES-256-GCM tenant BYOK encryption (separate BYOK_ENCRYPTION_KEY + AAD)
+        |     |-- Atomic R2 conditional ETag CAS admission leases & shared quotas
+        |     +-- Deep Chat v2.5.1 bundle integrity check (R2 static_assets/deepChat.bundle.v2.5.1.js + local assets/deepChat.bundle.js)
+        |
+        +-- imports ./src/interpreter-ui-and-contracts.mjs
+              |-- Production (/) & Public Demo (/demo) HTML + embedded browser ES module
+              |-- Deep Chat (<deep-chat>) Web Component integration
+              |-- Hostinger gateway model catalog & simplified VPS affiliate disclosure
+              |-- Open in your IDE dropdown options
+              +-- Microsoft Clarity (/demo-only opt-in + data-clarity-mask="true" verification)
+```
+
+---
+
 <!-- last_verified: 2026-05-28 -->
 # Architecture
 

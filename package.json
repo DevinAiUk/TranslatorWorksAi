@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "node scripts/build.mjs",
     "doctor": "node scripts/doctor.mjs",
     "setup:keys": "node scripts/doctor.mjs",
-    "lint": "node --check scripts/doctor.mjs && node --check worksai-live-interpreter-maintenance-worker.mjs && node --check tests/ci-qualification.test.mjs",
-    "secret-scan": "node -e \"import('node:fs').then(fs=>{for(const f of ['.env.example','wrangler.toml','scripts/doctor.mjs','worksai-live-interpreter-maintenance-worker.mjs','CHANGELOG.md','docs/marketing/security-release-draft.md','tests/ci-qualification.test.mjs']){if(!fs.existsSync(f))continue;const c=fs.readFileSync(f,'utf8');if(/sk-hstgr-[A-Za-z0-9]{16,}|sk-proj-[A-Za-z0-9]{16,}|AIza[0-9A-Za-z_-]{25,}/.test(c)){console.error('Secret leak in '+f);process.exit(1);}}console.log('✓ Secret scan passed (0 leaks).');})\"",
-    "test": "node --test tests/ci-qualification.test.mjs"
+    "lint": "node --check worksai-live-interpreter-worker.mjs && node --check src/interpreter-worker.mjs && node --check src/interpreter-cohere-and-hostinger.mjs && node --check src/interpreter-ui-and-contracts.mjs && node --check scripts/build.mjs && node --check scripts/doctor.mjs && node --check worksai-live-interpreter-maintenance-worker.mjs && node --check tests/ci-qualification.test.mjs && node --check worksai-live-interpreter-v1.1.0.test.mjs && node --check worksai-live-interpreter-v1.2.1.test.mjs && node --check worksai-live-interpreter-v1.3.0.test.mjs",
+    "secret-scan": "node -e \"import('node:fs').then(fs=>{for(const f of ['worksai-live-interpreter-worker.mjs','src/interpreter-worker.mjs','src/interpreter-cohere-and-hostinger.mjs','src/interpreter-ui-and-contracts.mjs','.env.example','wrangler.toml','scripts/build.mjs','scripts/doctor.mjs','worksai-live-interpreter-maintenance-worker.mjs','CHANGELOG.md','README.md','ARCHITECTURE.md','DEPLOYMENT-AND-ROLLBACK-RUNBOOK.md','docs/marketing/security-release-draft.md','tests/ci-qualification.test.mjs','worksai-live-interpreter-v1.1.0.test.mjs','worksai-live-interpreter-v1.2.1.test.mjs','worksai-live-interpreter-v1.3.0.test.mjs']){if(!fs.existsSync(f))continue;const c=fs.readFileSync(f,'utf8');if(/sk-hstgr-[A-Za-z0-9]{16,}|sk-proj-[A-Za-z0-9]{16,}|AIza[0-9A-Za-z_-]{25,}/.test(c)){console.error('Secret leak in '+f);process.exit(1);}}console.log('✓ Secret scan passed (0 leaks).');})\"",
+    "test": "node --test tests/ci-qualification.test.mjs && node worksai-live-interpreter-v1.1.0.test.mjs && node worksai-live-interpreter-v1.2.1.test.mjs && node worksai-live-interpreter-v1.3.0.test.mjs"
   },
   "engines": {
     "node": ">=20.18.1"

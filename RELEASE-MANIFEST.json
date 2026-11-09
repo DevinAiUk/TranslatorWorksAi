@@ -6,6 +6,13 @@
   "cloudflareAccountId": "dc1b1fad6c4ef1c4a6a4cff0c6a19f43",
   "cloudflareZoneId": "ce9b21157b7b1c0d83eacd3180884f13",
   "r2Bucket": "worksai-datalake",
+  "entryPoint": "worksai-live-interpreter-worker.mjs",
+  "srcEntryPointAlias": "src/interpreter-worker.mjs",
+  "runtimeModules": [
+    "worksai-live-interpreter-worker.mjs",
+    "src/interpreter-cohere-and-hostinger.mjs",
+    "src/interpreter-ui-and-contracts.mjs"
+  ],
   "hostingerRouterBaseUrl": "https://router.hostinger.com/v1",
   "hostingerModels": {
     "gpt": "gpt-5-mini",
@@ -19,19 +26,117 @@
     "configured": true,
     "clientId": "21902121526-0nf4rmkli2es0kd0ene5brjtlfl7rj34.apps.googleusercontent.com",
     "flow": "gis_oidc_id_token_post",
+    "nonceChallengeEndpoint": "/api/auth/google/nonce",
     "tokenVerificationEndpoint": "/api/auth/google",
     "authorizedOrigin": "https://translate.worksai.org",
     "redirectUriRequired": false
   },
   "deepChatAsset": {
+    "localPath": "assets/deepChat.bundle.js",
     "r2Key": "static_assets/deepChat.bundle.v2.5.1.js",
+    "pinnedCdnUrls": [
+      "https://cdn.jsdelivr.net/npm/deep-chat@2.5.1/dist/deepChat.bundle.js",
+      "https://unpkg.com/deep-chat@2.5.1/dist/deepChat.bundle.js"
+    ],
     "bytes": 386971,
     "sha256": "6844eaf354e19d50dcdd8ee78968d6ae32ccd4b9f15a883902d60e93d69caf84"
   },
   "files": {
-    "worksai-live-interpreter-worker.bundle.mjs": {
-      "bytes": 223153,
-      "sha256": "968eb901b59c8989aabadf5798dfeead59110f2bc4010c3d2ca557a055896fc3"
+    ".devcontainer/devcontainer.json": {
+      "bytes": 410,
+      "sha256": "cdb077f66031642410e93d1cb4c58b227bc89f694379fddac86c8ca766bd0d5b"
+    },
+    ".env.example": {
+      "bytes": 826,
+      "sha256": "d8e3c26625a31026c15aa11d7ddaba2204d96dd02239c533c97d3af0f64ea33a"
+    },
+    ".gitignore": {
+      "bytes": 713,
+      "sha256": "6d9b57fd5010b00cd16c0bd38b209d9571c693b94d38be150222fdb3de0aa35e"
+    },
+    ".github/workflows/ci-cd.yml": {
+      "bytes": 4839,
+      "sha256": "16bc7e5611134c7e00cc6584e90d2cd7091ddcbee088e73ddae2e1505b0debf9"
+    },
+    "ARCHITECTURE.md": {
+      "bytes": 12768,
+      "sha256": "d0e6b9d934006c2fded72c3d7f646ff290c4789e6d1e1e3596c873c42c2f6704"
+    },
+    "CHANGELOG.md": {
+      "bytes": 12001,
+      "sha256": "51dd3a0b1e335013599c4ba78fd5344c04c53cd624c039f5856ff047f95b89f6"
+    },
+    "DEPLOYMENT-AND-ROLLBACK-RUNBOOK.md": {
+      "bytes": 3650,
+      "sha256": "298d49b4353b2ee5364c46b5e6d938d1b6aea8b44140de9e95765ec31659bcec"
+    },
+    "LICENSE-NOTICES.md": {
+      "bytes": 2969,
+      "sha256": "5698d1b45abbaaae5902d01d6f045e20b10897e587b9969cd12e58dd86c063e6"
+    },
+    "README.md": {
+      "bytes": 17274,
+      "sha256": "a623ed136c0f23119415cb66b61da985686fd7f3fe63702cb78cdbe5b883fba8"
+    },
+    "docs/marketing/security-release-draft.md": {
+      "bytes": 15280,
+      "sha256": "ee4b14339f712ed279cb78fce4969c6f1c55aa48a6fd9f3b9f43ef401610ceb8"
+    },
+    "package-lock.json": {
+      "bytes": 267,
+      "sha256": "47a954d71e6177a898c75566e064406b23fe6fee2393dc5187ef545cd51ede6e"
+    },
+    "package.json": {
+      "bytes": 1961,
+      "sha256": "b47bcf0a82b7fd0663878d43fcfa3cac6eed363fe4598025da2eec9cbead6693"
+    },
+    "scripts/build.mjs": {
+      "bytes": 9495,
+      "sha256": "9f294b5c922bbd3d8dd4b262d3183659a16b6596b06328ec8c9da5663c0a89a1"
+    },
+    "scripts/doctor.mjs": {
+      "bytes": 8920,
+      "sha256": "a1cdf20d9548c01d51092d6e41755e4a42ee01cc97b5cb754a4878da3fe3370c"
+    },
+    "src/interpreter-cohere-and-hostinger.mjs": {
+      "bytes": 98830,
+      "sha256": "9f569ca69eba86ff5bed46325a9fe2de963e846a6dee6e8ca34d28a24fe3de17"
+    },
+    "src/interpreter-ui-and-contracts.mjs": {
+      "bytes": 54805,
+      "sha256": "95c85d1ea16641657c2b70ab440aed6865b4b28535199bfb38075865d4875723"
+    },
+    "src/interpreter-worker.mjs": {
+      "bytes": 460,
+      "sha256": "67b859e6e91e78fcae071cf1086282feee44e93205ae1f980f840da735520ac9"
+    },
+    "tests/ci-qualification.test.mjs": {
+      "bytes": 15894,
+      "sha256": "9c086eac5ddd83533af301eaa3fdb366e80ac9f4dc978dd02e027bdabbefaa27"
+    },
+    "worksai-live-interpreter-maintenance-worker.mjs": {
+      "bytes": 3298,
+      "sha256": "5c70002731319350b2f209a1ffe4cef70fa57de05d69c671c0a2dc230529b593"
+    },
+    "worksai-live-interpreter-v1.1.0.test.mjs": {
+      "bytes": 42722,
+      "sha256": "b016b92769221a1a19c92dfb6148ec074c61c42c52db254bc2d529cbc2152150"
+    },
+    "worksai-live-interpreter-v1.2.1.test.mjs": {
+      "bytes": 42536,
+      "sha256": "712d5a0b746c411dd7de267c63c34a61ff8e006e2d78410b34e7c28fe732dd18"
+    },
+    "worksai-live-interpreter-v1.3.0.test.mjs": {
+      "bytes": 33171,
+      "sha256": "a056d41c702e014c21231a17683d6d735cdb31980b28c9c907d72359b1b59e5c"
+    },
+    "worksai-live-interpreter-worker.mjs": {
+      "bytes": 142019,
+      "sha256": "f4f0cc793d2dc6da9736bd021987dfd50b414f631e61f5327c0dd796998e1235"
+    },
+    "wrangler.toml": {
+      "bytes": 1270,
+      "sha256": "8e202900a4dcbeb89ede492f2771c2f27d276391497b3eeb93e360197a282f3c"
     }
   },
   "deployment": {

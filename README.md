@@ -1,3 +1,49 @@
+<!-- last_verified: 2026-11-08 -->
+# WorksAI Live Interpreter (`translate.worksai.org`) — v1.3.1
+
+**WorksAI Live Interpreter** is the Cloudflare Workers edge release of `gpt-realtime-translate-live-event-interpreter`, integrating the genuine `<deep-chat>` (`v2.5.1`) Web Component, unified **Hostinger AI Router** (**GPT** `gpt-5-mini` + **Gemini** `gemini-3.5-flash-lite`), **Cohere** recording transcription & Command R7B processing, invite-gated **Sign in with Google** (OIDC GIS credential-token POST), and an 8-tool JSON-RPC 2.0 **MCP endpoint** (`https://translate.worksai.org/api/mcp`).
+
+## 1. Runtime Source Architecture (Three ES Modules)
+
+The Cloudflare Worker runtime (`main = "worksai-live-interpreter-worker.mjs"` in `wrangler.toml`, with canonical `src/interpreter-worker.mjs` re-export) is structured into three ES modules:
+
+| Module Path | Responsibilities |
+| :--- | :--- |
+| `worksai-live-interpreter-worker.mjs` (`src/interpreter-worker.mjs`) | Worker entry point (`export default { fetch }`), request router (`handleInterpreterFetch`), HMAC-SHA256 session JWT & consent receipt signing (`mintSignedSessionToken`, `verifySignedSessionToken`, `mintSignedConsentReceipt`, `verifySignedConsentReceipt`), RS256 Google OIDC verification + one-time challenge nonces (`issueGoogleOidcChallengeNonce`, `verifyAndSignInWithGoogle`, `_verifyGoogleJwtSignature`), live session & WebRTC/WS lifecycle (`InterpreterService`), and MCP JSON-RPC 2.0 dispatch (`handleMcpJsonRpc`). |
+| `src/interpreter-cohere-and-hostinger.mjs` | Hostinger AI Router (`https://router.hostinger.com/v1`) GPT & Gemini adapter (`resolveHostingerGatewayModel`, `resolveHostingerCredentialReference`, `executeHostingerChatOrAudio`), Cohere transcription (`cohere-transcribe-03-2026`) and Command R7B processing (`command-r7b-12-2024`), AES-256-GCM tenant BYOK encryption (`encryptTenantByokKey`, `decryptTenantByokKey`), conditional R2 CAS admission leases & shared quotas (`CohereReleaseGateService`), binary audio validation (`validateAndInspectAudioBinary`), and verified Deep Chat v2.5.1 bundle resolution (`resolveVerifiedDeepChatBundle`). |
+| `src/interpreter-ui-and-contracts.mjs` | Production (`/`) and public demo (`/demo`) HTML/CSS/JS renderer (`renderInterpreterAppHtml`), `<deep-chat>` Web Component wiring, Hostinger gateway model catalog (`HOSTINGER_GATEWAY_MODEL_CATALOG`), simplified Hostinger VPS affiliate contract (`HOSTINGER_AFFILIATE_OFFER`), IDE launch options (`IDE_LAUNCH_OPTIONS`), and Microsoft Clarity `/demo`-only privacy & DOM masking contract (`CLARITY_PRIVACY_CONTRACT`). |
+
+Separate non-runtime files:
+- `worksai-live-interpreter-maintenance-worker.mjs` — Prebuilt zero-inference maintenance rollback Worker.
+- `scripts/build.mjs` — Clean-checkout build gate, relative import verifier, Deep Chat v2.5.1 asset SHA-256 verifier, embedded browser script syntax checker, and deterministic bundle generator (`dist/worksai-live-interpreter-worker.bundle.mjs`).
+- `scripts/doctor.mjs` — Non-echoing CLI credential setup & provenance doctor (`npm run doctor` / `npm run setup:keys`).
+- `assets/deepChat.bundle.js` — Pinned genuine compiled `deep-chat@2.5.1` asset (`386,971` bytes, `SHA-256: 6844eaf354e19d50dcdd8ee78968d6ae32ccd4b9f15a883902d60e93d69caf84`), mirrored in Cloudflare R2 (`WORKSAI_DATA_LAKE`) under `static_assets/deepChat.bundle.v2.5.1.js`.
+
+## 2. Clean-Checkout Build, Verification & Test Instructions
+
+```bash
+# 1. Install from lockfile (zero external npm dependencies required for Worker runtime)
+npm ci
+
+# 2. Syntax & module check across all runtime modules, scripts, maintenance worker, and tests
+npm run lint
+
+# 3. Clean-checkout build gate (verifies 3 runtime modules, relative imports, Deep Chat SHA-256,
+#    embedded browser JS syntax, and writes dist/worksai-live-interpreter-worker.bundle.mjs)
+npm run build
+
+# 4. Run secret & credential hygiene scan
+npm run secret-scan
+
+# 5. Run CLI Doctor & credential provenance self-check
+npm run doctor
+
+# 6. Run full qualification test suites (CI build/auth/OIDC suite + v1.1.0 + v1.2.1 + v1.3.0 suites)
+npm test
+```
+
+---
+
 <!-- last_verified: 2026-06-26 -->
 # GPT-Realtime-Translate Live Event Interpreter
 

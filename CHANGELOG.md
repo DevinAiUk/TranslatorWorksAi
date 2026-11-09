@@ -3,6 +3,14 @@
 All notable verified changes to **WorksAI Live Interpreter** (`worksai-live-interpreter`) are documented in this file.
 Each entry distinguishes verification state using **[Implemented]**, **[Configured]**, **[Deployed]**, and **[Live-provider verified]**.
 
+## [Unreleased]
+
+### Changed
+- **[Implemented]** Modularized runtime source and made clean-checkout builds reproducible (`worksai-live-interpreter-worker.mjs` / `src/interpreter-worker.mjs`, `src/interpreter-cohere-and-hostinger.mjs`, and `src/interpreter-ui-and-contracts.mjs`), adding `scripts/build.mjs`, `package-lock.json`, pinned `assets/deepChat.bundle.js` (`386,971` bytes, `SHA-256: 6844eaf354e19d50dcdd8ee78968d6ae32ccd4b9f15a883902d60e93d69caf84`), and CI `wrangler deploy --dry-run` verification without mutating production.
+
+### Security
+- **[Implemented]** Hardened Google OIDC token verification in `worksai-live-interpreter-worker.mjs` (`verifyAndSignInWithGoogle`, `_verifyGoogleJwtSignature`, `issueGoogleOidcChallengeNonce`) so only asymmetric `RS256` Google ID tokens are accepted (`HS256` tokens are unconditionally rejected with `401 UNSUPPORTED_GOOGLE_TOKEN_ALG` in all environments) and server-issued challenge nonces (`POST /api/auth/google/nonce`, `wai_oidc_nonce` cookie + R2/memory store) enforce expiry and one-time use.
+
 ## [1.3.1] — 2026-11-08
 
 ### Added
@@ -12,6 +20,7 @@ Each entry distinguishes verification state using **[Implemented]**, **[Configur
 
 ### Changed
 - **[Deployed]** Simplified the Hostinger VPS affiliate presentation (`GET /api/affiliate/hostinger` and footer promo bar): retained the purple **Launch your own hosting** button (`rel="sponsored noopener"`, approved Hostinger KVM 2 cart referral link, and `"See current Hostinger pricing."`) and replaced the multi-sentence disclosure with one compact, high-contrast line immediately underneath: `"*Affiliate — we may earn a commission."`
+- **[Deployed]** Deployed Cloudflare Worker `worksai-live-interpreter` Version `63aa6128-0483-4dc6-a89c-b9ca8ae12368` (Deployment `d512c7fd-4d5e-4a13-ad9d-223669f1cec1`, `223,153` bytes, `SHA-256: 968eb901b59c8989aabadf5798dfeead59110f2bc4010c3d2ca557a055896fc3`).
 - **[Deployed]** Updated `getGoogleOAuthConfigStatus()` (`GET /api/auth/google/config`) and `scripts/doctor.mjs` to document the implemented `gis_oidc_id_token_post` flow (`redirectUriRequired: false`) and removed the unused `GET /api/auth/google/callback` stub endpoint.
 
 ### Fixed
@@ -22,11 +31,12 @@ Each entry distinguishes verification state using **[Implemented]**, **[Configur
 - **[Implemented / Deployed]** Completed secret-metadata incident audit across Cloudflare Worker version history, local workspace files, release archives, Git commits, and NotebookLM records. Scrubbed a historical key prefix from local test fixtures (`worksai-live-interpreter-v1.3.0.test.mjs`) and documented prudent provider key rotation (`HOSTINGER_AI_ROUTER_API_KEY` and `COHERE_API_KEY`) because Cloudflare Worker Versions 4 (`6f4c0828-1a1d-426f-b535-98450afb2955`) and 5 (`0117f5c2-a324-4287-81b0-b51c185998c0`) retain historical binding names in immutable Cloudflare version metadata.
 
 ### Known Limitations
+- **Google Cloud Console Authorized JavaScript Origin**: Browser sign-in on `https://translate.worksai.org` requires `https://translate.worksai.org` to be registered under **Authorized JavaScript origins** on OAuth Client ID `21902121526-0nf4rmkli2es0kd0ene5brjtlfl7rj34.apps.googleusercontent.com` in Google Cloud Console (otherwise Google's popup returns `Error 400: origin_mismatch`).
 - **Direct OpenAI key required for live speech-to-speech**: `gpt-realtime-translate` WebRTC interpretation requires a direct OpenAI API key (`OPENAI_API_KEY`, currently unconfigured in production: `liveProviderKeyConfigured: false`). Hostinger AI Router keys (`sk-hstgr-...`) are not interchangeable with direct OpenAI keys and are rejected on `/api/sessions/:id/ephemeral-secret` (`503 DIRECT_OPENAI_KEY_REQUIRED_GATEWAY_KEY_REJECTED`).
 - **Provider access and cost controls**: Live Hostinger AI Router (`gpt-5-mini`, `gemini-3.5-flash-lite`) model catalog discovery (`GET https://router.hostinger.com/v1/models`, 163 models) is verified, while live paid chat/audio completions remain gated behind explicit per-test cost approval. Cohere `cohere-transcribe-03-2026` and `command-r7b-12-2024` are live-provider verified under strict trial/release-gate quotas.
-- **Browser test scope**: Automated Headless Chromium E2E tests and cryptographic RS256/HS256 OIDC unit tests verify `POST /api/auth/google`, invite gating, anti-auto-merge, and DOM layout; full interactive Google sign-in requires a human browser session authenticated with an invited Google account.
+- **Browser test scope**: Automated Headless Chromium E2E tests and cryptographic RS256 OIDC unit tests verify `POST /api/auth/google`, `POST /api/auth/google/nonce`, invite gating, anti-auto-merge, and DOM layout; full interactive Google sign-in requires a human browser session authenticated with an invited Google account after registering the JavaScript origin in Google Cloud Console.
 - **Link shortener availability**: `https://linkengine.worksai.org/api/mcp` (`linkengine.create_shortlink`) is a Category D WordPress/PHP sandbox whose `/s/wai-q4` route returns `HTTP 404`; the application uses the approved direct Hostinger referral URL until a verified shortlink redirect is deployed.
-- **Event broadcast disabled without Durable Object coordinator**: Multi-attendee `ws_event_broadcast` mode returns `501 BROADCAST_COORDINATOR_NOT_CONFIGURED` until `INTERPRETER_BROADCAST_DO` is bound (`broadcastCoordinatorBound: false`).
+- **Event broadcast disabled without Durable Object coordinator**: Multi-attendee `ws_event_broadcast` mode returns `501 BROADCAST_REQUIRES_DURABLE_OBJECT_COORDINATOR` until `INTERPRETER_BROADCAST_DO` is bound (`broadcastCoordinatorBound: false`).
 - **Cooperative WebRTC termination**: Ending a 1:1 WebRTC session revokes server session state in R2 and signals `shouldStopBrowserMedia: true` on heartbeat, but relies on the browser client to close its peer connection and media tracks once an ephemeral WebRTC session is active.
 - **Unverified regional residency from model suffixes**: Selecting `-us` or `-eu` model aliases (`gpt-5-mini-us`, `gpt-5-mini-eu`, `gemini-3.5-flash-lite-us`, `gemini-3.5-flash-lite-eu`) routes through global ingress `https://router.hostinger.com/v1` and does not guarantee end-to-end regional data residency.
 

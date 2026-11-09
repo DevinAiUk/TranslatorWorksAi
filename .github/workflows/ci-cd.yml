@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   verify-and-test:
-    name: Syntax, Secret Hygiene, Doctor & Qualification Suites
+    name: Syntax, Clean-Checkout Build Gate, Wrangler Dry-Run, Secret Hygiene & Qualification Suites
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -26,8 +26,34 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Clean-Checkout Dependency Installation from Lockfile
+        run: npm ci
+
+      - name: Verify Zero Untracked or Missing Runtime Module Dependencies
+        run: |
+          git status --porcelain
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Clean checkout contains untracked or modified files before build."
+            exit 1
+          fi
+          for f in worksai-live-interpreter-worker.mjs src/interpreter-worker.mjs src/interpreter-cohere-and-hostinger.mjs src/interpreter-ui-and-contracts.mjs; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing committed runtime module or asset: $f"
+              exit 1
+            fi
+          done
+
       - name: Run Syntax & Module Verification
         run: npm run lint
+
+      - name: Run Clean-Checkout Build & Deep Chat Asset Integrity Gate
+        run: npm run build
+
+      - name: Run Wrangler Dry-Run Bundle Inspection (No Production Mutation)
+        run: |
+          npx --yes wrangler@3.114.0 deploy --dry-run --outdir /tmp/wrangler-dry-run
+          ls -la /tmp/wrangler-dry-run
+          sha256sum /tmp/wrangler-dry-run/worksai-live-interpreter-worker.mjs
 
       - name: Run Secret & Credential Hygiene Scan
         run: npm run secret-scan
@@ -35,7 +61,7 @@ jobs:
       - name: Run CLI Doctor & Provenance Self-Check
         run: npm run doctor
 
-      - name: Run v1.3.1 CI Qualification & Security Contract Suite
+      - name: Run v1.1.0, v1.2.1, v1.3.0 & CI Qualification Test Suites
         run: npm test
 
       - name: Verify RELEASE-MANIFEST.json Integrity
@@ -44,29 +70,26 @@ jobs:
             import fs from "node:fs";
             import crypto from "node:crypto";
             const m = JSON.parse(fs.readFileSync("RELEASE-MANIFEST.json", "utf8"));
-            let verifiedCount = 0;
             for (const [file, meta] of Object.entries(m.files)) {
-              if (!fs.existsSync(file)) continue;
               const data = fs.readFileSync(file);
               const sha = crypto.createHash("sha256").update(data).digest("hex");
               if (sha !== meta.sha256) {
                 console.error(`Checksum mismatch for ${file}: expected ${meta.sha256}, got ${sha}`);
                 process.exit(1);
               }
-              verifiedCount++;
             }
-            console.log(`✓ Verified ${verifiedCount} repository files against RELEASE-MANIFEST.json.`);
+            console.log("✓ All RELEASE-MANIFEST.json SHA-256 checksums verified.");
           '
 
-      - name: Upload Verified Release Manifest Artifact
+      - name: Upload Verified Release Manifest & Generated Bundle Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: worksai-live-interpreter-v1.3.1-manifest
+          name: worksai-live-interpreter-v1.3.1-manifest-and-bundle
           path: |
             RELEASE-MANIFEST.json
             SHA256SUMS.txt
-            CHANGELOG.md
-            docs/marketing/security-release-draft.md
+            dist/worksai-live-interpreter-worker.bundle.mjs
+            /tmp/wrangler-dry-run/worksai-live-interpreter-worker.mjs
 
   deploy-production:
     name: Deploy to Cloudflare Workers (translate.worksai.org)
