@@ -1,6 +1,6 @@
 {
   "product": "WorksAI Live Interpreter",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "workerName": "worksai-live-interpreter",
   "customDomain": "translate.worksai.org",
   "cloudflareAccountId": "dc1b1fad6c4ef1c4a6a4cff0c6a19f43",
@@ -15,29 +15,37 @@
       "gemini-3.5-flash-lite-eu"
     ]
   },
+  "googleOidc": {
+    "configured": true,
+    "clientId": "21902121526-0nf4rmkli2es0kd0ene5brjtlfl7rj34.apps.googleusercontent.com",
+    "flow": "gis_oidc_id_token_post",
+    "tokenVerificationEndpoint": "/api/auth/google",
+    "authorizedOrigin": "https://translate.worksai.org",
+    "redirectUriRequired": false
+  },
   "deepChatAsset": {
     "r2Key": "static_assets/deepChat.bundle.v2.5.1.js",
     "bytes": 386971,
     "sha256": "6844eaf354e19d50dcdd8ee78968d6ae32ccd4b9f15a883902d60e93d69caf84"
   },
   "files": {
-    "worksai-live-interpreter-worker.mjs": {
-      "bytes": 221861,
-      "sha256": "7c35ffcb130dc9d82cb759069b64ea616e13942730cb530f3a025ae61e27f520"
+    "worksai-live-interpreter-worker.bundle.mjs": {
+      "bytes": 223153,
+      "sha256": "968eb901b59c8989aabadf5798dfeead59110f2bc4010c3d2ca557a055896fc3"
     }
   },
   "deployment": {
-    "deploymentId": "b0acebd8-c942-4fde-ae36-1639c9168f35",
-    "versionId": "5b905a2d-ed1c-44f3-95fc-8e244f57292a",
-    "deployedAt": "2026-11-08T20:22:13.222264Z",
-    "workerScriptBytes": 221861,
-    "workerScriptSha256": "7c35ffcb130dc9d82cb759069b64ea616e13942730cb530f3a025ae61e27f520",
-    "baselineReplaced": {
-      "version": "1.2.1",
-      "deploymentId": "26d74072-d1d6-4c63-b42d-2727d413e071",
-      "versionId": "7af5ed39-9bd4-4acf-879e-37ae00b409d0",
-      "workerScriptBytes": 137370,
-      "workerScriptSha256": "b325d4a10e1e34782db16ca077598c044d5ec8029281eec98831e76ba4cda662"
+    "deploymentId": "d512c7fd-4d5e-4a13-ad9d-223669f1cec1",
+    "versionId": "63aa6128-0483-4dc6-a89c-b9ca8ae12368",
+    "deployedAt": "2026-11-09T00:33:12.225612Z",
+    "bundledWorkerScriptBytes": 223153,
+    "bundledWorkerScriptSha256": "968eb901b59c8989aabadf5798dfeead59110f2bc4010c3d2ca557a055896fc3",
+    "previousV130Deployment": {
+      "version": "1.3.0",
+      "deploymentId": "b0acebd8-c942-4fde-ae36-1639c9168f35",
+      "versionId": "5b905a2d-ed1c-44f3-95fc-8e244f57292a",
+      "workerScriptBytes": 221861,
+      "workerScriptSha256": "7c35ffcb130dc9d82cb759069b64ea616e13942730cb530f3a025ae61e27f520"
     }
   }
 }

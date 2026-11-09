@@ -1,13 +1,13 @@
 {
   "name": "worksai-live-interpreter",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
   "type": "module",
   "scripts": {
     "doctor": "node scripts/doctor.mjs",
     "setup:keys": "node scripts/doctor.mjs",
     "lint": "node --check scripts/doctor.mjs && node --check worksai-live-interpreter-maintenance-worker.mjs && node --check tests/ci-qualification.test.mjs",
-    "secret-scan": "node -e \"import('node:fs').then(fs=>{for(const f of ['.env.example','wrangler.toml','scripts/doctor.mjs','worksai-live-interpreter-maintenance-worker.mjs','tests/ci-qualification.test.mjs']){if(!fs.existsSync(f))continue;const c=fs.readFileSync(f,'utf8');if(/sk-hstgr-[A-Za-z0-9]{16,}|sk-proj-[A-Za-z0-9]{16,}|AIza[0-9A-Za-z_-]{25,}/.test(c)){console.error('Secret leak in '+f);process.exit(1);}}console.log('✓ Secret scan passed (0 leaks).');})\"",
+    "secret-scan": "node -e \"import('node:fs').then(fs=>{for(const f of ['.env.example','wrangler.toml','scripts/doctor.mjs','worksai-live-interpreter-maintenance-worker.mjs','CHANGELOG.md','docs/marketing/security-release-draft.md','tests/ci-qualification.test.mjs']){if(!fs.existsSync(f))continue;const c=fs.readFileSync(f,'utf8');if(/sk-hstgr-[A-Za-z0-9]{16,}|sk-proj-[A-Za-z0-9]{16,}|AIza[0-9A-Za-z_-]{25,}/.test(c)){console.error('Secret leak in '+f);process.exit(1);}}console.log('✓ Secret scan passed (0 leaks).');})\"",
     "test": "node --test tests/ci-qualification.test.mjs"
   },
   "engines": {

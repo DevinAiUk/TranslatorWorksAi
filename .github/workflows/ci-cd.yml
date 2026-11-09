@@ -35,7 +35,7 @@ jobs:
       - name: Run CLI Doctor & Provenance Self-Check
         run: npm run doctor
 
-      - name: Run v1.3.0 CI Qualification & Live Production Verification Suite
+      - name: Run v1.3.1 CI Qualification & Security Contract Suite
         run: npm test
 
       - name: Verify RELEASE-MANIFEST.json Integrity
@@ -61,10 +61,12 @@ jobs:
       - name: Upload Verified Release Manifest Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: worksai-live-interpreter-v1.3.0-manifest
+          name: worksai-live-interpreter-v1.3.1-manifest
           path: |
             RELEASE-MANIFEST.json
             SHA256SUMS.txt
+            CHANGELOG.md
+            docs/marketing/security-release-draft.md
 
   deploy-production:
     name: Deploy to Cloudflare Workers (translate.worksai.org)
@@ -72,6 +74,9 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push' && github.repository == 'DevinAiUk/gpt-realtime-translate-live-event-interpreter'
     runs-on: ubuntu-latest
     environment: production
+    concurrency:
+      group: worksai-live-interpreter-production-deploy
+      cancel-in-progress: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * WorksAI Live Interpreter v1.3.0 — Secure CLI Setup & Environment Doctor
- * Implements Sections 6 & 20:
+ * WorksAI Live Interpreter v1.3.1 — Secure CLI Setup & Environment Doctor
+ * Implements Sections 4, 6 & 20:
  * - Resolves intended Worker (worksai-live-interpreter) & environment (preview | production)
  * - Supports "Hostinger AI Router — GPT and Gemini" (HOSTINGER_AI_ROUTER_API_KEY, https://router.hostinger.com/v1, gpt-5-mini, gemini-3.5-flash-lite)
  * - Rejects secrets passed on command-line arguments (CLI_ARGV_SECRET_FORBIDDEN)
  * - Accepts secret input only through non-echoing TTY/stdin pipe and provisions via wrangler secret put
  * - Detects & offers controlled migration if an existing OPENAI_API_KEY holds a sk-hstgr- credential without clobbering direct OpenAI keys
- * - Explains missing Google OAuth configuration (GOOGLE_CLIENT_ID, https://translate.worksai.org)
+ * - Verifies Google OIDC GIS credential-token POST configuration (GOOGLE_CLIENT_ID, https://translate.worksai.org, redirectUriRequired: false)
  */
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,9 +41,9 @@ export const SUPPORTED_SECRET_CONTRACTS = Object.freeze([
   },
   {
     name: "GOOGLE_CLIENT_ID",
-    group: "Sign in with Google (OIDC)",
+    group: "Sign in with Google (OIDC GIS Credential-Token POST)",
     expectedSuffix: ".apps.googleusercontent.com",
-    requiredFor: "Google Identity Services login for https://translate.worksai.org (independent of generation keys)"
+    requiredFor: "Google Identity Services login for https://translate.worksai.org via POST /api/auth/google (independent of generation keys)"
   },
   {
     name: "JWT_SECRET",
@@ -142,7 +142,7 @@ export function runDoctorReport(env = process.env, argv = process.argv.slice(2))
   const targetEnv = argv.find((a) => a.startsWith("--env="))?.split("=")[1] || "production";
 
   const lines = [];
-  lines.push(`=== WorksAI Live Interpreter v1.3.0 — Doctor & Secure Provider Setup ===`);
+  lines.push(`=== WorksAI Live Interpreter v1.3.1 — Doctor & Secure Provider Setup ===`);
   lines.push(`Target Worker : ${workerName} (${targetEnv})`);
   lines.push(`Custom Domain : https://translate.worksai.org`);
   lines.push(`Hostinger URL : https://router.hostinger.com/v1 (GPT: gpt-5-mini | Gemini: gemini-3.5-flash-lite)`);
@@ -180,11 +180,10 @@ export function runDoctorReport(env = process.env, argv = process.argv.slice(2))
   const googleConfigured = statuses.find((s) => s.name === "GOOGLE_CLIENT_ID")?.present;
   if (!googleConfigured) {
     lines.push("");
-    lines.push(`ℹ  Google OAuth Setup Guidance:`);
+    lines.push(`ℹ  Google OAuth Setup Guidance (GIS Credential-Token POST Flow):`);
     lines.push(`   1. Create an OAuth 2.0 Web Client ID in Google Cloud Console.`);
-    lines.push(`   2. Add Authorized JavaScript Origin: https://translate.worksai.org`);
-    lines.push(`   3. Add Authorized Redirect URI: https://translate.worksai.org/api/auth/google/callback`);
-    lines.push(`   4. Provision secret: npx wrangler secret put GOOGLE_CLIENT_ID --name ${workerName}`);
+    lines.push(`   2. Add Authorized JavaScript Origin: https://translate.worksai.org (no redirect callback URI required for GIS credential-token POST to /api/auth/google).`);
+    lines.push(`   3. Provision secret: npx wrangler secret put GOOGLE_CLIENT_ID --name ${workerName}`);
   }
 
   lines.push("");

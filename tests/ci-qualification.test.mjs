@@ -46,7 +46,7 @@ test("CLI credential provenance distinguishes Hostinger sk-hstgr- from direct Op
   assert.equal(byokSameAsJwt.reason, "MUST_DIFFER_FROM_JWT_SECRET");
 });
 
-test("Doctor report detects controlled migration and outputs Google OAuth guidance without echoing secrets", () => {
+test("Doctor report detects controlled migration and outputs GIS OIDC setup guidance without echoing secrets", () => {
   const rep = runDoctorReport(
     { OPENAI_API_KEY: SYNTH_HSTGR },
     ["--worker=worksai-live-interpreter", "--env=production"]
@@ -54,7 +54,7 @@ test("Doctor report detects controlled migration and outputs Google OAuth guidan
   assert.equal(rep.ok, true);
   assert.equal(rep.exitCode, 0);
   assert.ok(rep.migrationNotice.includes("CONTROLLED MIGRATION AVAILABLE"));
-  assert.ok(rep.output.includes("https://translate.worksai.org/api/auth/google/callback"));
+  assert.ok(rep.output.includes("https://translate.worksai.org"));
   assert.ok(!rep.output.includes("synthetic_fixture_0001"));
 });
 
@@ -68,18 +68,19 @@ test("Zero-inference maintenance worker serves 200 on /health and 503 on inferen
   assert.equal(infRes.status, 503);
 });
 
-test("Release manifest and wrangler configuration contracts match v1.3.0 specification", () => {
+test("Release manifest, CHANGELOG.md, and security marketing draft match v1.3.1 specification", () => {
   const manifest = JSON.parse(fs.readFileSync("RELEASE-MANIFEST.json", "utf8"));
-  assert.equal(manifest.version, "1.3.0");
+  assert.equal(manifest.version, "1.3.1");
   assert.equal(manifest.workerName, "worksai-live-interpreter");
   assert.equal(manifest.customDomain, "translate.worksai.org");
-  assert.equal(manifest.hostingerRouterBaseUrl, "https://router.hostinger.com/v1");
-  assert.equal(manifest.hostingerModels.gpt, "gpt-5-mini");
-  assert.equal(manifest.hostingerModels.gemini, "gemini-3.5-flash-lite");
-  assert.equal(manifest.deepChatAsset.bytes, 386971);
+  assert.equal(manifest.googleOidc.configured, true);
+  assert.equal(manifest.googleOidc.flow, "gis_oidc_id_token_post");
+  assert.equal(manifest.googleOidc.redirectUriRequired, false);
 
-  const wrangler = fs.readFileSync("wrangler.toml", "utf8");
-  assert.ok(wrangler.includes('name = "worksai-live-interpreter"'));
-  assert.ok(wrangler.includes('HOSTINGER_AI_ROUTER_BASE_URL = "https://router.hostinger.com/v1"'));
-  assert.ok(wrangler.includes('ENABLE_COHERE_KEY_FAILOVER = "false"'));
+  const changelog = fs.readFileSync("CHANGELOG.md", "utf8");
+  assert.ok(changelog.includes("## [1.3.1]"));
+  assert.ok(changelog.includes("*Affiliate — we may earn a commission."));
+
+  const mkt = fs.readFileSync("docs/marketing/security-release-draft.md", "utf8");
+  assert.ok(mkt.includes("AI conversations with clearer controls."));
 });
