@@ -685,6 +685,8 @@ this.tenantQuotasCache = new Map();
 this.bootstrapState = null;
 this.invitesMap = new Map();
 this.nonceChallengesMap = new Map();
+this.nonceInFlightSet = new Set();
+this.maxActiveOidcNonces = 256;
 this.cohere = new CohereReleaseGateService(env, { instanceId: this.instanceId, transportFetch: options.cohereTransportFetch });
 this.metrics = { requestsTotal: 0, sessionsStartedTotal: 0, sessionsEndedTotal: 0, attendeesJoinedTotal: 0, realtimeChunksTotal: 0, textTranslationsTotal: 0 };
 this.glossaries.set("tenant_worksai_alpha:gls_b2b_ops", {
@@ -710,7 +712,24 @@ const obj = await this.env.WORKSAI_DATA_LAKE.get(key);
 if (!obj) return null;
 try { return typeof obj.json === "function" ? await obj.json() : JSON.parse(typeof obj.text === "function" ? await obj.text() : obj.body); } catch { return null; }
 }
-async _r2PutJson(key, data) { if (!this.hasR2()) return false; await this.env.WORKSAI_DATA_LAKE.put(key, JSON.stringify(data)); return true; }
+async _r2GetJsonWithEtag(key) {
+if (!this.hasR2()) return null;
+const obj = await this.env.WORKSAI_DATA_LAKE.get(key);
+if (!obj) return null;
+try {
+  const data = typeof obj.json === "function" ? await obj.json() : JSON.parse(typeof obj.text === "function" ? await obj.text() : obj.body);
+  return { data, etag: obj.etag || obj.httpEtag || null };
+} catch { return null; }
+}
+async _r2PutJson(key, data, options = undefined) {
+if (!this.hasR2()) return false;
+const res = options ? await this.env.WORKSAI_DATA_LAKE.put(key, JSON.stringify(data), options) : await this.env.WORKSAI_DATA_LAKE.put(key, JSON.stringify(data));
+return res !== null;
+}
+async _r2DeleteKey(key) {
+if (!this.hasR2() || typeof this.env.WORKSAI_DATA_LAKE.delete !== "function") return false;
+try { await this.env.WORKSAI_DATA_LAKE.delete(key); return true; } catch { return false; }
+}
 async revokeToken(jti, meta = {}) { if (!jti) return false; this.revokedTokens.add(jti); await this._r2PutJson(`revoked_tokens/${jti}.json`, { jti, revokedAt: new Date().toISOString(), ...meta }); return true; }
 async isTokenRevoked(jti) {
 if (!jti) return false;
@@ -784,10 +803,30 @@ missingConfigurationStep: configured
 : "Provision GOOGLE_CLIENT_ID in Cloudflare Worker secrets (npx wrangler secret put GOOGLE_CLIENT_ID --name worksai-live-interpreter) with Authorized JavaScript Origin https://translate.worksai.org."
 };
 }
+async _pruneExpiredOidcNonces(nowMs = Date.now()) {
+  const expiredHashes = [];
+  for (const [hash, entry] of this.nonceChallengesMap.entries()) {
+    if (nowMs >= entry.expiresAtMs || (entry.consumed && nowMs - (entry.consumedAtMs || entry.issuedAtMs) > 60000)) {
+      this.nonceChallengesMap.delete(hash);
+      expiredHashes.push(hash);
+    }
+  }
+  const maxCap = this.maxActiveOidcNonces || 256;
+  while (this.nonceChallengesMap.size >= maxCap) {
+    const oldestKey = this.nonceChallengesMap.keys().next().value;
+    if (!oldestKey) break;
+    this.nonceChallengesMap.delete(oldestKey);
+    expiredHashes.push(oldestKey);
+  }
+  if (expiredHashes.length && this.hasR2()) {
+    await Promise.allSettled(expiredHashes.slice(0, 16).map((h) => this._r2DeleteKey(`auth/oidc_nonces/${h}.json`)));
+  }
+}
 async issueGoogleOidcChallengeNonce() {
+  const nowMs = Date.now();
+  await this._pruneExpiredOidcNonces(nowMs);
   const bytes = (globalThis.crypto || (await import("node:crypto")).webcrypto).getRandomValues(new Uint8Array(16));
   const nonce = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-  const nowMs = Date.now();
   const expiresAtMs = nowMs + 300000;
   const nonceHash = await sha256HexString(`oidc_nonce:${nonce}`);
   const rec = { nonceHash, issuedAtMs: nowMs, expiresAtMs, consumed: false };
@@ -801,24 +840,48 @@ async _consumeGoogleOidcChallengeNonce(nonceValue, requireServerIssued = false) 
     throw apiErr(401, "INVALID_GOOGLE_NONCE", "Google OIDC nonce is missing or too short.");
   }
   const nonceHash = await sha256HexString(`oidc_nonce:${clean}`);
-  const rec = (await this._r2GetJson(`auth/oidc_nonces/${nonceHash}.json`)) || this.nonceChallengesMap.get(nonceHash);
-  if (rec) {
-    if (rec.consumed) {
+  if (this.nonceInFlightSet.has(nonceHash)) {
+    throw apiErr(401, "GOOGLE_NONCE_ALREADY_USED", "Google OIDC challenge nonce is already being redeemed by a concurrent request (one-time use enforced).");
+  }
+  this.nonceInFlightSet.add(nonceHash);
+  try {
+    const memRec = this.nonceChallengesMap.get(nonceHash);
+    if (memRec?.consumed) {
       throw apiErr(401, "GOOGLE_NONCE_ALREADY_USED", "Google OIDC challenge nonce has already been used (one-time use enforced).");
     }
-    if (Date.now() >= rec.expiresAtMs) {
-      throw apiErr(401, "GOOGLE_NONCE_EXPIRED", "Google OIDC challenge nonce has expired.");
+    const r2Key = `auth/oidc_nonces/${nonceHash}.json`;
+    const r2Wrapped = await this._r2GetJsonWithEtag(r2Key);
+    const rec = r2Wrapped?.data || memRec;
+    if (rec) {
+      if (rec.consumed) {
+        this.nonceChallengesMap.set(nonceHash, rec);
+        throw apiErr(401, "GOOGLE_NONCE_ALREADY_USED", "Google OIDC challenge nonce has already been used (one-time use enforced).");
+      }
+      if (Date.now() >= rec.expiresAtMs) {
+        this.nonceChallengesMap.delete(nonceHash);
+        await this._r2DeleteKey(r2Key);
+        throw apiErr(401, "GOOGLE_NONCE_EXPIRED", "Google OIDC challenge nonce has expired.");
+      }
+      rec.consumed = true;
+      rec.consumedAtMs = Date.now();
+      this.nonceChallengesMap.set(nonceHash, rec);
+      if (r2Wrapped?.etag) {
+        const condOk = await this._r2PutJson(r2Key, rec, { onlyIf: { etagMatches: r2Wrapped.etag } });
+        if (!condOk) {
+          throw apiErr(401, "GOOGLE_NONCE_ALREADY_USED", "Google OIDC challenge nonce concurrent conditional write rejected (one-time use enforced).");
+        }
+      } else {
+        await this._r2PutJson(r2Key, rec);
+      }
+      return { verifiedServerState: true };
     }
-    rec.consumed = true;
-    rec.consumedAtMs = Date.now();
-    this.nonceChallengesMap.set(nonceHash, rec);
-    await this._r2PutJson(`auth/oidc_nonces/${nonceHash}.json`, rec);
-    return { verifiedServerState: true };
+    if (requireServerIssued) {
+      throw apiErr(401, "UNKNOWN_OR_EXPIRED_GOOGLE_NONCE", "Google OIDC nonce was not issued by this server or has expired.");
+    }
+    return { verifiedServerState: false };
+  } finally {
+    this.nonceInFlightSet.delete(nonceHash);
   }
-  if (requireServerIssued) {
-    throw apiErr(401, "UNKNOWN_OR_EXPIRED_GOOGLE_NONCE", "Google OIDC nonce was not issued by this server or has expired.");
-  }
-  return { verifiedServerState: false };
 }
 async verifyAndSignInWithGoogle(body = {}, signingSecret, cookieNonce = "") {
   assertNoIdentityOrUrlOverrides(body);

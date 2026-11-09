@@ -127,12 +127,12 @@
       "sha256": "712d5a0b746c411dd7de267c63c34a61ff8e006e2d78410b34e7c28fe732dd18"
     },
     "worksai-live-interpreter-v1.3.0.test.mjs": {
-      "bytes": 33171,
-      "sha256": "a056d41c702e014c21231a17683d6d735cdb31980b28c9c907d72359b1b59e5c"
+      "bytes": 35768,
+      "sha256": "afc1463371ba466ae81412f2f25d0121f863f8cb23d3671666a11af16c58ab2a"
     },
     "worksai-live-interpreter-worker.mjs": {
-      "bytes": 142019,
-      "sha256": "f4f0cc793d2dc6da9736bd021987dfd50b414f631e61f5327c0dd796998e1235"
+      "bytes": 144718,
+      "sha256": "f640224d9eb6892c9d672e7f87bf4351b07fb888bab80cd6b46c68e7815800d9"
     },
     "wrangler.toml": {
       "bytes": 1270,
@@ -152,5 +152,18 @@
       "workerScriptBytes": 221861,
       "workerScriptSha256": "7c35ffcb130dc9d82cb759069b64ea616e13942730cb530f3a025ae61e27f520"
     }
+  },
+  "generatedBundle": {
+    "path": "dist/worksai-live-interpreter-worker.bundle.mjs",
+    "bytes": 296253,
+    "sha256": "c69afaa6729fd498f7bd4297ab2b8ce1473d770e76c4095838f1e59cf2a41176"
+  },
+  "oidcHardening": {
+    "rs256Only": true,
+    "hs256ShortcutRemoved": true,
+    "serverIssuedChallengeNonce": true,
+    "atomicConcurrentNonceLock": true,
+    "r2ConditionalWriteOnlyIfEtag": true,
+    "maxActiveUnconsumedNonces": 256
   }
 }

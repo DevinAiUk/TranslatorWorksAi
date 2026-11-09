@@ -481,6 +481,52 @@ async function runV130QualificationSuite() {
     assert.equal(linkedBody.role, "member", "Role must come from server invite record, never self-assigned");
     assert.equal(linkedBody.tenantId, "t_worksai");
 
+    // 4.4b: Concurrent simultaneous redemption of the same server-issued OIDC challenge nonce (Promise.all race test)
+    // Enforces atomic one-time use: under two simultaneous requests with the exact same nonce, at most one succeeds and the concurrent twin fails with 401 GOOGLE_NONCE_ALREADY_USED.
+    const chRes = await handleInterpreterFetch(new Request("https://translate.worksai.org/api/auth/google/nonce", {
+      method: "POST"
+    }), env, {}, svc);
+    assert.equal(chRes.status, 200);
+    const chData = await chRes.json();
+    assert.ok(chData.nonce && chData.nonce.length >= 32, "Server must issue 128-bit cryptographic challenge nonce");
+
+    const concurrentGoogleJwt = await mintTestGoogleIdToken({
+      iss: "https://accounts.google.com",
+      aud: env.GOOGLE_CLIENT_ID,
+      sub: "google_sub_alice_1001",
+      email: "alice@example.org",
+      email_verified: true,
+      nonce: chData.nonce,
+      iat: nowSec - 5,
+      exp: nowSec + 1800
+    });
+    const makeNonceReq = () => handleInterpreterFetch(new Request("https://translate.worksai.org/api/auth/google", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Cookie": `wai_oidc_nonce=${chData.nonce}`
+      },
+      body: JSON.stringify({ idToken: concurrentGoogleJwt, expectedNonce: chData.nonce })
+    }), env, {}, svc);
+
+    const [raceRes1, raceRes2] = await Promise.all([makeNonceReq(), makeNonceReq()]);
+    const raceStatuses = [raceRes1.status, raceRes2.status].sort((a, b) => a - b);
+    assert.deepEqual(raceStatuses, [200, 401], `Expected exactly one 200 and one 401 under concurrent nonce redemption, got ${raceStatuses}`);
+    const failedRaceRes = raceRes1.status === 401 ? raceRes1 : raceRes2;
+    const failedRaceBody = await failedRaceRes.json();
+    assert.equal(failedRaceBody.error, "GOOGLE_NONCE_ALREADY_USED", "Concurrent duplicate nonce redemption must fail with GOOGLE_NONCE_ALREADY_USED");
+
+    // 4.4c: Sequential replay of already-consumed nonce also fails with 401 GOOGLE_NONCE_ALREADY_USED
+    const replayRes = await makeNonceReq();
+    assert.equal(replayRes.status, 401);
+    assert.equal((await replayRes.json()).error, "GOOGLE_NONCE_ALREADY_USED");
+
+    // 4.4d: Bounded active challenge nonce cap (failed/abandoned login attempts cannot accumulate unlimited nonce records)
+    for (let i = 0; i < 280; i++) {
+      await svc.issueGoogleOidcChallengeNonce();
+    }
+    assert.ok(svc.nonceChallengesMap.size <= svc.maxActiveOidcNonces, `Expected nonceChallengesMap size <= ${svc.maxActiveOidcNonces}, got ${svc.nonceChallengesMap.size}`);
+
     // 4.5: Subsequent Google sign-in with the same stable Google sub succeeds without needing another invite code
     const resRepeatLogin = await handleInterpreterFetch(new Request("https://translate.worksai.org/api/auth/google", {
       method: "POST",
