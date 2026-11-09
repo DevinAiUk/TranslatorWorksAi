@@ -53,7 +53,7 @@ jobs:
         run: |
           npx --yes wrangler@3.114.0 deploy --dry-run --outdir /tmp/wrangler-dry-run
           ls -la /tmp/wrangler-dry-run
-          sha256sum /tmp/wrangler-dry-run/worksai-live-interpreter-worker.mjs
+          sha256sum /tmp/wrangler-dry-run/worksai-live-interpreter-worker.js
 
       - name: Run Secret & Credential Hygiene Scan
         run: npm run secret-scan
@@ -89,7 +89,7 @@ jobs:
             RELEASE-MANIFEST.json
             SHA256SUMS.txt
             dist/worksai-live-interpreter-worker.bundle.mjs
-            /tmp/wrangler-dry-run/worksai-live-interpreter-worker.mjs
+            /tmp/wrangler-dry-run/worksai-live-interpreter-worker.js
 
   deploy-production:
     name: Deploy to Cloudflare Workers (translate.worksai.org)

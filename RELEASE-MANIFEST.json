@@ -55,8 +55,8 @@
       "sha256": "6d9b57fd5010b00cd16c0bd38b209d9571c693b94d38be150222fdb3de0aa35e"
     },
     ".github/workflows/ci-cd.yml": {
-      "bytes": 4839,
-      "sha256": "16bc7e5611134c7e00cc6584e90d2cd7091ddcbee088e73ddae2e1505b0debf9"
+      "bytes": 4837,
+      "sha256": "cceee1a6cc26497d75565fddab535c1e6332a3bd78c57440faa767cafdf511eb"
     },
     "ARCHITECTURE.md": {
       "bytes": 12768,
